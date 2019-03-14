@@ -15,54 +15,82 @@ knitr::opts_chunk$set(
   tidy = TRUE
 )
 ```
-## In this Rmd all samples will be combined
 
 ### Setup the Seurat Object for Ovary
 
 This is an attempt to run a [guided clustering tutorial](http://satijalab.org/seurat/pbmc3k_tutorial.html). Changes in various parameters and introduction of additional functions will be explored.
 
-We start by reading in the data. All features in Seurat have been configured to work with sparse matrices which results in significant memory and speed savings for Drop-seq/inDrop/10x data. A list of cell cycle markers is also loaded
+We start by reading in the data. All features in Seurat have been configured to work with sparse matrices which results in significant memory and speed savings for Drop-seq/inDrop/10x data. A list of cell cycle markers is loaded
 
 
 ```{r init, message=FALSE}
-library(plotly)
-library(Seurat)
-library(dplyr)
-library(Matrix)
+suppressMessages(library(plotly))
+suppressMessages(library(Seurat))
+suppressMessages(library(dplyr))
+suppressMessages(library(Matrix))
+suppressMessages(library(topGO))
+suppressMessages(library(org.Hs.eg.db))
+suppressMessages(library(gplots))
+suppressMessages(library(genefilter))
+suppressMessages(library(scran))
 
 outputDir  = getwd()
 
-# Also read in a list of cell cycle markers, from Tirosh et al, 2015
-cc.genes <- readLines(con = "/apthto/data/data/cellCycleMarkers/regev_lab_cell_cycle_genes.txt")
+# Read in a list of cell cycle markers, from Tirosh et al, 2015
+cc.genes <- readLines(con = "/exports/sasc/project-249-kidney_10x/data/cellCycleMarkers/regev_lab_cell_cycle_genes.txt")
 
 # We can segregate this list into markers of G2/M phase and markers of S
 # phase
 s.genes <- cc.genes[1:43]
 g2m.genes <- cc.genes[44:97]
 
+## A table with SampleID and patients
+sample2Pat <- read.table(file = "/exports/sasc/project-269-scRNA_ovary/analysis/juneRun/combineOvary/batchEffectScaleData/sample2PatientQuote.csv", header = TRUE, as.is = TRUE)
+
+## First Ovary run, output of cellRanger 2.1.1
 # Read the datasets one by one
+ovary.1.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample1_B1_i12A/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.2.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample2_B1_i12B/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample3_B1_i12G/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.4.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample4_B1_i12F/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.5.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample5_B2_i10E/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.6a.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample6a_B1_i12H/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.7.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample7_B2_i10C/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.8a.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample8a_B2_i10A/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.8b.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample8b_B2_i10B/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.10.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample10_B2_i10D/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.11.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample11_B2_i10F/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.12.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample12_B2_i10G/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.13.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample13_B1_i12C/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.145.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sample145_B1_i12D/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.C1.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRanger2.1.1Counts/sampleC1_B1_i12E/outs/filtered_gene_bc_matrices/GRCh38/")
+
+## June datasets
 # Read the datasets one by one
-ovary.1.data <- Read10X(data.dir = "/path/to/data/sample1_B1_i12A/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.2.data <- Read10X(data.dir = "/path/to/data/sample2_B1_i12B/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.3.data <- Read10X(data.dir = "/path/to/data/sample3_B1_i12G/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.4.data <- Read10X(data.dir = "/path/to/data/sample4_B1_i12F/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.5.data <- Read10X(data.dir = "/path/to/data/sample5_B2_i10E/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.6a.data <- Read10X(data.dir = "/path/to/data/sample6a_B1_i12H/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.7.data <- Read10X(data.dir = "/path/to/data/sample7_B2_i10C/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.8a.data <- Read10X(data.dir = "/path/to/data/sample8a_B2_i10A/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.8b.data <- Read10X(data.dir = "/path/to/data/sample8b_B2_i10B/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.10.data <- Read10X(data.dir = "/path/to/data/sample10_B2_i10D/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.11.data <- Read10X(data.dir = "/path/to/data/sample11_B2_i10F/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.12.data <- Read10X(data.dir = "/path/to/data/sample12_B2_i10G/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.13.data <- Read10X(data.dir = "/path/to/data/sample13_B1_i12C/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.145.data <- Read10X(data.dir = "/path/to/data/sample145_B1_i12D/outs/filtered_gene_bc_matrices/GRCh38/")
-ovary.C1.data <- Read10X(data.dir = "/path/to/data/sampleC1_B1_i12E/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.1_1.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_1-1/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.1_2.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_1-2/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.1_3.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_1-3/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.1_4.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_1-4/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.1_5.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_1-5/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.1_6.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_1-6/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.1_7.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_1-7/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.1_8.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_1-8/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3_5.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_3-5/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3_6.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_3-6/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3_13.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_3-13/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3_14.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_3-14/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3_15.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_3-15/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3_16.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_3-16/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3_17.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_3-17/outs/filtered_gene_bc_matrices/GRCh38/")
+ovary.3_18.data <- Read10X(data.dir = "/exports/sasc/project-269-scRNA_ovary/data/cellRangerOutputJune/sample_3-18/outs/filtered_gene_bc_matrices/GRCh38/")
 ```
 
 ```{r create.object, results='hide', message=FALSE}
 # Initialize the Seurat object with the raw (non-normalized data).  Keep all
 # genes expressed in >= 3 cells. Keep all cells with at
 # least 100 detected genes
+
+## Old Ovary samples
 ovary.1 <- CreateSeuratObject(raw.data = ovary.1.data, min.cells = 3, min.genes = 100, project = "01")
 ovary.2 <- CreateSeuratObject(raw.data = ovary.2.data, min.cells = 3, min.genes = 100, project = "02")
 ovary.3 <- CreateSeuratObject(raw.data = ovary.3.data, min.cells = 3, min.genes = 100, project = "03")
@@ -79,8 +107,44 @@ ovary.13 <- CreateSeuratObject(raw.data = ovary.13.data, min.cells = 3, min.gene
 ovary.145 <- CreateSeuratObject(raw.data = ovary.145.data, min.cells = 3, min.genes = 100, project = "145")
 ovary.C1 <- CreateSeuratObject(raw.data = ovary.C1.data, min.cells = 3, min.genes = 100, project = "C1")
 
+## June Datasets
+ovary.1_1 <- CreateSeuratObject(raw.data = ovary.1_1.data, min.cells = 3, min.genes = 100, project = "1.1")
+ovary.1_2 <- CreateSeuratObject(raw.data = ovary.1_2.data, min.cells = 3, min.genes = 100, project = "1.2")
+ovary.1_3 <- CreateSeuratObject(raw.data = ovary.1_3.data, min.cells = 3, min.genes = 100, project = "1.3")
+ovary.1_4 <- CreateSeuratObject(raw.data = ovary.1_4.data, min.cells = 3, min.genes = 100, project = "1.4")
+ovary.1_5 <- CreateSeuratObject(raw.data = ovary.1_5.data, min.cells = 3, min.genes = 100, project = "1.5")
+ovary.1_6 <- CreateSeuratObject(raw.data = ovary.1_6.data, min.cells = 3, min.genes = 100, project = "1.6")
+ovary.1_7 <- CreateSeuratObject(raw.data = ovary.1_7.data, min.cells = 3, min.genes = 100, project = "1.7")
+ovary.1_8 <- CreateSeuratObject(raw.data = ovary.1_8.data, min.cells = 3, min.genes = 100, project = "1.8")
+ovary.3_5 <- CreateSeuratObject(raw.data = ovary.3_5.data, min.cells = 3, min.genes = 100, project = "3.5")
+ovary.3_6 <- CreateSeuratObject(raw.data = ovary.3_6.data, min.cells = 3, min.genes = 100, project = "3.6")
+ovary.3_13 <- CreateSeuratObject(raw.data = ovary.3_13.data, min.cells = 3, min.genes = 100, project = "3.13")
+ovary.3_14 <- CreateSeuratObject(raw.data = ovary.3_14.data, min.cells = 3, min.genes = 100, project = "3.14")
+ovary.3_15 <- CreateSeuratObject(raw.data = ovary.3_15.data, min.cells = 3, min.genes = 100, project = "3.15")
+ovary.3_16 <- CreateSeuratObject(raw.data = ovary.3_16.data, min.cells = 3, min.genes = 100, project = "3.16")
+ovary.3_17 <- CreateSeuratObject(raw.data = ovary.3_17.data, min.cells = 3, min.genes = 100, project = "3.17")
+ovary.3_18 <- CreateSeuratObject(raw.data = ovary.3_18.data, min.cells = 3, min.genes = 100, project = "3.18")
+
 ## Merge objects
-ovary <- MergeSeurat(ovary.6a, ovary.8a, add.cell.id1 = "6a", add.cell.id2 = "8a", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary.1_1, ovary.1_2, add.cell.id1 = "1.1", add.cell.id2 = "1.2", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.1_3, add.cell.id2 = "1.3", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.1_4, add.cell.id2 = "1.4", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.1_5, add.cell.id2 = "1.5", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.1_6, add.cell.id2 = "1.6", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.1_7, add.cell.id2 = "1.7", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.1_8, add.cell.id2 = "1.8", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.3_5, add.cell.id2 = "3.5", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.3_6, add.cell.id2 = "3.6", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.3_13, add.cell.id2 = "3.13", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.3_14, add.cell.id2 = "3.14", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.3_15, add.cell.id2 = "3.15", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.3_16, add.cell.id2 = "3.16", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.3_17, add.cell.id2 = "3.17", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.3_18, add.cell.id2 = "3.18", do.normalize = FALSE)
+
+## Old ovary Data
+ovary <- MergeSeurat(ovary, ovary.6a, add.cell.id2 = "6a", do.normalize = FALSE)
+ovary <- MergeSeurat(ovary, ovary.8a, add.cell.id2 = "8a", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.8b, add.cell.id2 = "8b", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.145, add.cell.id2 = "145", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.C1, add.cell.id2 = "C1", do.normalize = FALSE)
@@ -95,14 +159,30 @@ ovary <- MergeSeurat(ovary, ovary.11, add.cell.id2 = "11", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.12, add.cell.id2 = "12", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.13, add.cell.id2 = "13", do.normalize = FALSE)
 
+## Print the overview of cell counts per sample
 table(ovary@meta.data$orig.ident)
+
+## Infer the run (old or June) from the sample name and save it
+indexJuneRun <- grep(".", ovary@meta.data$orig.ident, fixed = TRUE) 
+origin.run <- orgin.exper <- rep("OldRun", times=length(ovary@meta.data$orig.ident))
+origin.run[indexJuneRun] = "JuneRun"
+#ovary <- AddMetaData(object = ovary, metadata = origin.run, col.name = "origin.run")
+ovary@meta.data$origin.run <- origin.run 
+table(ovary@meta.data$origin.run)
+
+## Create a meta.data field with patient info
+orig.ident <- ovary@meta.data$orig.ident
+for (r in 1:nrow(sample2Pat)){
+  sampleID <- sample2Pat[r, 1]
+  patient <- sample2Pat[r, 2]
+  orig.ident <- replace(orig.ident, orig.ident == sampleID , patient)
+}
+ovary@meta.data$patient <- as.factor(orig.ident)
 ```
 
 ***
-
 ### Standard pre-processing workflow
 The steps below encompass the standard pre-processing workflow for scRNA-seq data in Seurat. These represent the creation of a Seurat object, the selection and filtration of cells based on QC metrics, data normalization and scaling, and the detection of highly variable genes. In previous versions, we grouped many of these steps together in the `Setup` function, but in v2, we separate these steps into a clear and sequential workflow.
-
 
 ### Useful Definitions
 * UMIs: Unique Molecular Identifiers (UMIs) are random oligonucleotide barcodes. Through a UMI, identical copies arising from distinct molecules can be distinguished from those arising through PCR-amplification of the same molecule.
@@ -111,24 +191,29 @@ The steps below encompass the standard pre-processing workflow for scRNA-seq dat
 ### QC and selecting cells for further analysis
 While the `CreateSeuratObject` imposes a basic minimum gene-cutoff, you may want to filter out cells at this stage based on technical or biological parameters. Seurat allows you to easily explore QC metrics and filter cells based on any user-defined criteria. In the example below, we visualize gene and molecule counts, plot their relationship, and exclude cells with a clear outlier number of genes detected as potential multiplets. Of course this is not a guaranteed method to exclude cell doublets, but we include this as an example of filtering user-defined outlier cells. We also filter cells based on the percentage of mitochondrial genes present.
 
-```{r qc, results='hide', fig.height=20,fig.width=10,  }
+```{r qc, results='hide', fig.height=20,fig.width=10}
 # The number of genes and UMIs (nGene and nUMI) are automatically calculated
-# for every object by Seurat.  For non-UMI data, nUMI represents the sum of
-# the non-normalized values within a cell We calculate the percentage of
-# mitochondrial genes here and store it in percent.mito using AddMetaData.
+# for every object by Seurat. 
 # We use object@raw.data since this represents non-transformed and
 # non-log-normalized counts The % of UMI mapping to MT-genes is a common
 # scRNA-seq QC metric.  NOTE: You must have the Matrix package loaded to
 # calculate the percent.mito values.
-mito.genes <- grep(pattern = "^MT-", x = rownames(x = ovary@data), value = TRUE)
+mito.genes <- grep(pattern = "^MT-", 
+                   x = rownames(x = ovary@data), 
+                   value = TRUE)
 percent.mito <- Matrix::colSums(ovary@raw.data[mito.genes, ])/Matrix::colSums(ovary@raw.data)
 
 # AddMetaData adds columns to object@meta.data, and is a great place to
 # stash QC stats
 ovary <- AddMetaData(object = ovary, metadata = percent.mito, col.name = "percent.mito")
+VlnPlot(object = ovary, 
+        features.plot = c("nGene", "nUMI", "percent.mito"), 
+        nCol = 1, 
+        point.size.use = 0.5)
+ggsave(paste0(outputDir, "/QCViolins.pdf"), width = 7, height = 15)
+```
 
-VlnPlot(object = ovary, features.plot = c("nGene", "nUMI", "percent.mito"), nCol = 1, point.size.use = 0.5)
-
+```{r qc2, results='hide', fig.height=10,fig.width=10}
 # GenePlot is typically used to visualize gene-gene relationships, but can
 # be used for anything calculated by the object, i.e. columns in
 # object@meta.data, PC scores etc.  Since there is a rare subset of cells
@@ -140,12 +225,13 @@ GenePlot(object = ovary, gene1 = "nUMI", gene2 = "nGene")
 
 
 # We filter out cells that have unique gene counts over 2500 or less than
-# 300 Note that low.thresholds and high.thresholds are used to define a
+# 200 Note that low.thresholds and high.thresholds are used to define a
 # 'gate' -Inf and Inf should be used if you don't want a lower or upper
 # threshold.
-ovary <- FilterCells(object = ovary, subset.names = c("nGene", "percent.mito", "nUMI"), 
-                     low.thresholds = c(200, -Inf, 300), high.thresholds = c(2500, 0.07, Inf))
-
+ovary <- FilterCells(object = ovary, 
+                     subset.names = c("nGene", "percent.mito", "nUMI"), 
+                     low.thresholds = c(200, -Inf, 300), 
+                     high.thresholds = c(2500, 0.10, 15000))
 ```
 
 ```{r cell_number }
@@ -153,9 +239,6 @@ cat("### Number of cells after applying filtering:\n")
 print(ovary@data@Dim[2])
 table(ovary@meta.data$orig.ident)
 ```
-
-***
-
 
 ***
 ### Normalizing the data
@@ -167,18 +250,16 @@ After removing unwanted cells from the dataset, the next step is to normalize th
 `colSums` is the sum of raw counts for one cell
 The per cell sums of normalized counts are not identical between cells. 
 
-```{r normalize, results='hide'}
-ovary <- NormalizeData(object = ovary, normalization.method = "LogNormalize", 
-                      scale.factor = 10000)
+```{r normalize, cache = TRUE, results='hide'}
+ovary <- NormalizeData(object = ovary, 
+                       normalization.method = "LogNormalize", 
+                       scale.factor = 10000)
 
 ```
 
-
 ## Dissociation genes on normalized data
 ```{r removeDissociatioAffecgedCellsNormalized, fig.height=6, fig.width=6}
-
 ## Gene list is from Van Den Brink et al. (2017) suplement. data R code
-
 genesChrom <- c("Actg1__chr11","Ankrd1__chr19","Arid5a__chr1","Atf3__chr1","Atf4__chr15","Bag3__chr7","Bhlhe40__chr6",
 "Brd2__chr17","Btg1__chr10","Btg2__chr1","Ccnl1__chr3","Ccrn4l__chr3","Cebpb__chr2","Cebpd__chr16",
 "Cebpg__chr7","Csrnp1__chr9","Cxcl1__chr5","Cyr61__chr3","Dcn__chr10","Ddx3x__chrX","Ddx5__chr11",
@@ -217,7 +298,7 @@ cat("Genes from mouse we miss in human:\n")
 unname(genes[!genes %in% row.names(Data)])
 
 ## Calculate the percentage of UMIs maping on dissociation genes
-totalSum <- colSums(ovary@data)
+totalSum <- Matrix::colSums(ovary@data)
 selection <- Data[genes, ]
 selection[is.na(selection)] <- 0
 dissociationSums <- colSums(selection)  
@@ -227,12 +308,13 @@ countSums <- countSums[-1]
 colnames(countSums) <- c("totalCount", "dissociationCounts")
 countSums$percentage <- countSums$dissociationCounts/countSums$totalCount
 ## Save in meta.data of object
+# ovary <- AddMetaData(object = ovary, metadata = countSums$percentage, col.name = "percent.dissoc")
 ovary@meta.data$percent.dissoc <- countSums$percentage
 
 plotDissociation <- function(sample){
   percentages <- ovary@meta.data$percent.dissoc[ovary@meta.data$orig.ident == sample]
   # Make a histogram showing the distribution of the metric "Percentage of dissociation-affected reads per cell":
-  hist(percentages, breaks = 100, col = "lightgrey", main = paste("Expression dissociation-affected genes for sample: ", sample), 
+  hist(percentages, breaks = 100, col = "lightgrey", main = paste0("Expression dissociation-affected genes for sample: ", sample), 
        xlab = "Ratio of dissociation-affected genes to total gene count", ylab = "Number of cells", xlim = c(0, 0.20))
 }
 
@@ -242,17 +324,27 @@ for (sample in levels(ovary@ident)){
 
 ## Draw histogram for all samples
 percentages <- ovary@meta.data$percent.dissoc
-hist(percentages, breaks = 100, col = "lightgrey", main = paste("Expression dissociation-affected genes for sample: ", sample), 
-       xlab = "Ratio of dissociation-affected genes to total gene count", ylab = "Number of cells", xlim = c(0, 0.20))
-
+pdf(paste0(outputDir, "/histDissociationPercent.pdf"), width = 10, height = 7)
+hist(percentages, 
+     breaks = 100,
+     col = "lightgrey",
+     main = "Expression dissociation-affected genes for all samples: ",
+     xlab = "Ratio of dissociation-affected genes to total gene count",
+     ylab = "Number of cells",
+     xlim = c(0, 0.20))
+dev.off()
 ```
 
 ## Keep cells with dissociation percentages below the threshold of 0.06 or 6%
 ```{r filterDissoc}
-ovary <-FilterCells(ovary, subset.names = "percent.dissoc", low.thresholds = -Inf, high.thresholds = 0.06)
+ovary <-FilterCells(ovary, 
+                    subset.names = "percent.dissoc", 
+                    low.thresholds = -Inf, 
+                    high.thresholds = 0.06)
 cat("### Number of cells after applying Dissociation-indiced genes filtering:\n")
 print(ovary@data@Dim[2])
 table(ovary@meta.data$orig.ident)
+table(ovary@meta.data$origin.run)
 ```
 
 ### Detection of variable genes across the single cells
@@ -262,8 +354,12 @@ Seurat calculates highly variable genes and focuses on these for downstream anal
 *Exact parameter settings may vary empirically from dataset to dataset, and based on visual inspection of the plot. Setting the y.cutoff parameter to 2 identifies genes that are more than two standard deviations away from the average dispersion within a bin. The default X-axis function is the mean expression level, and for Y-axis it is the log(Variance/mean). log is natural logarithm (e=2.71). All mean/variance calculations are not performed in log-space, but the results are reported in log-space - see relevant functions for exact details.*
 
 ```{r var_genes, fig.height=7, fig.width=11, results='hide'}
-ovary <- FindVariableGenes(object = ovary, mean.function = ExpMean, dispersion.function = LogVMR, 
-                          x.low.cutoff = 0.05, x.high.cutoff = 4, y.cutoff = 0.25)
+ovary <- FindVariableGenes(object = ovary,
+                           mean.function = ExpMean, 
+                           dispersion.function = LogVMR, 
+                           x.low.cutoff = 0.1, 
+                           x.high.cutoff = 5, 
+                           y.cutoff = 0.4)
 
 ## Write the genes that have an average log expression>3 to a table and save it.
 topAveExpr = ovary@hvg.info[ovary@hvg.info[,1]>3, ]
@@ -289,17 +385,22 @@ Seurat v2.0 implements this regression as part of the data scaling process. Ther
 
 
 ```{r regress, fig.height=7, fig.width=11, results='hide'}
-ovary <- ScaleData(object = ovary, vars.to.regress = c("nUMI", "percent.mito"))
+ovary <- ScaleData(object = ovary, 
+                   vars.to.regress = c("nUMI", "percent.mito"))
 ```
 ***
 
 ```{r pca_viz_cell_cycle}
 ## Cell cycling scoring
-ovary <- CellCycleScoring(object = ovary, s.genes = s.genes, g2m.genes = g2m.genes, 
-                           set.ident = TRUE)
+ovary <- CellCycleScoring(object = ovary, 
+                          s.genes = s.genes, 
+                          g2m.genes = g2m.genes, 
+                          set.ident = TRUE)
 # Running a PCA on cell cycle genes reveals, unsurprisingly, that cells
 # separate entirely by phase
-ovary <- RunPCA(object = ovary, pc.genes = c(s.genes, g2m.genes), do.print = FALSE)
+ovary <- RunPCA(object = ovary, 
+                pc.genes = c(s.genes, g2m.genes), 
+                do.print = FALSE)
 PCAPlot(object = ovary)
 ```
 
@@ -309,8 +410,9 @@ We now attempt to subtract (‘regress out’) this source of heterogeneity from
 For each gene, Seurat models the relationship between gene expression and the S and G2M cell cycle scores. The scaled residuals of this model represent a ‘corrected’ expression matrix, that can be used downstream for dimensional reduction.
 
 ```{r regress out cell cycle }
-ovary <- ScaleData(object = ovary, vars.to.regress = c("S.Score", "G2M.Score"), 
-    display.progress = FALSE)
+ovary <- ScaleData(object = ovary, 
+                   vars.to.regress = c("S.Score", "G2M.Score"), 
+                   display.progress = FALSE)
 ```
 
 
@@ -319,20 +421,25 @@ ovary <- ScaleData(object = ovary, vars.to.regress = c("S.Score", "G2M.Score"),
 Next we perform PCA on the scaled data. By default, the genes in `object@var.genes` are used as input, but can be defined using pc.genes. We have typically found that running dimensionality reduction on highly variable genes can improve performance. However, with UMI data - particularly after regressing out technical variables, we often see that PCA returns similar (albeit slower) results when run on much larger subsets of genes, including the whole transcriptome.
 
 ```{r pca}
-ovary <- RunPCA(object = ovary, pc.genes = ovary@var.genes, do.print = TRUE, pcs.print = 1:5, genes.print = 5)
+ovary <- RunPCA(object = ovary, 
+                pc.genes = ovary@var.genes, 
+                pcs.compute = 20,
+                do.print = TRUE, 
+                pcs.print = 1:5, 
+                genes.print = 5)
 ```
 
 Seurat provides several useful ways of visualizing both cells and genes that define the PCA, including `PrintPCA`, `VizPCA`, `PCAPlot`, and `PCHeatmap`
 
-
 ```{r pca_viz}
 # Examine and visualize PCA results a few different ways
 ## Print PCAs
-PrintPCA(object = ovary, pcs.print = 1:5, genes.print = 5, use.full = FALSE)
+PrintPCA(object = ovary, 
+         pcs.print = 1:5, 
+         genes.print = 10, 
+         use.full = FALSE)
 ## Save the gene loading in a 
 write.table( ovary@dr$pca@gene.loadings, file = paste0(outputDir, "/geneLoadings"), sep = "\t", quote = FALSE)
-
-## 
 VizPCA(object = ovary, pcs.use = 1:2)
 PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2)
 
@@ -346,11 +453,20 @@ ovary <- ProjectPCA(object = ovary, do.print = FALSE)
 In particular `PCHeatmap` allows for easy exploration of the primary sources of heterogeneity in a dataset, and can be useful when trying to decide which PCs to include for further downstream analyses. Both cells and genes are ordered according to their PCA scores. Setting cells.use to a number plots the 'extreme' cells on both ends of the spectrum, which dramatically speeds plotting for large datasets. Though clearly a supervised analysis, we find this to be a valuable tool for exploring correlated gene sets.
 
 ```{r single-heatmap, warning=FALSE}
-PCHeatmap(object = ovary, pc.use = 1, cells.use = 500, do.balanced = TRUE, label.columns = FALSE)
+PCHeatmap(object = ovary, 
+          pc.use = 1, 
+          cells.use = 500, 
+          do.balanced = TRUE, 
+          label.columns = FALSE)
 ```
 
 ```{r multi-heatmap, fig.height=12, fig.width=9, warning=FALSE}
-PCHeatmap(object = ovary, pc.use = 1:12, cells.use = 500, do.balanced = TRUE, label.columns = FALSE, use.full = FALSE)
+PCHeatmap(object = ovary, 
+          pc.use = 1:20, 
+          cells.use = 500, 
+          do.balanced = TRUE, 
+          label.columns = FALSE, 
+          use.full = FALSE)
 ```
 
 ***
@@ -364,19 +480,26 @@ In Macosko *et al*, we implemented a resampling test inspired by the jackStraw p
 ```{r jackstraw, fig.height=6, fig.width=10, warning=FALSE, cache=TRUE, results = 'hide'}
 # NOTE: This process can take a long time for big datasets, comment out for expediency.
 # More approximate techniques such as those implemented in PCElbowPlot() can be used to reduce computation time
-ovary <- JackStraw(object = ovary, num.replicate = 100 )
+## Do not run as it takes too long
+## ovary <- JackStraw(object = ovary, num.replicate = 100 )
 ```
 
 The `JackStrawPlot` function provides a visualization tool for comparing the distribution of p-values for each PC with a uniform distribution (dashed line). 'Significant' PCs will show a strong enrichment of genes with low p-values (solid curve above the dashed line). In this case it appears that PCs 1-10 are significant.
 
 ```{r jsplots, fig.height=6, fig.width=10, warning=FALSE}
-JackStrawPlot(object = ovary, PCs = 1:12)
+## JackStrawPlot(object = ovary, PCs = 1:15)
 ```
 
 A more ad hoc method for determining which PCs to use is to look at a plot of the standard deviations of the principle components and draw your cutoff where there is a clear elbow in the graph. This can be done with `PCElbowPlot`. In this example, it looks like the elbow would fall around PC 9.
 
 ```{r elbow_plot, fig.height=6, fig.width=10, warning=FALSE}
 PCElbowPlot(object = ovary)
+```
+
+Print the percenatge of the standard deviation of each PC as a fraction of the total standard deviation od the first 20 PCs
+```{r PCDev_Percent}
+totalSdev <- sum(ovary@dr$pca@sdev)
+print(ovary@dr$pca@sdev/totalSdev)
 ```
 
 PC selection -- identifying the true dimensionality of a dataset -- is an important step for Seurat, but can be challenging/uncertain for the user. We therefore suggest these three approaches to consider. The first is more supervised, exploring PCs to determine relevant sources of heterogeneity, and could be used in conjunction with GSEA for example. The second implements a statistical test based on a random null model, but is time-consuming for large datasets, and may not return a clear PC cutoff. The third is a heuristic that is commonly used, and can be calculated instantly. In this example, all three approaches yielded similar results, but we might have been justified in choosing anything between PC 7-10 as a cutoff. We followed the jackStraw  here, admittedly buoyed by seeing the PCHeatmap returning interpretable signals (including canonical dendritic cell markers) throughout these PCs. Though the results are only subtly affected by small shifts in this cutoff (you can test below), we strongly suggest always explore the PCs they choose to include downstream.
@@ -394,8 +517,13 @@ The `FindClusters` function implements the procedure, and contains a resolution 
 
 # save.SNN = T saves the SNN so that the clustering algorithm can be rerun using the same graph
 # but with a different resolution value (see docs for full details)
-ovary <- FindClusters(object = ovary, reduction.type = "pca", dims.use = 1:15, 
-                     resolution = 0.9, print.output = 0, save.SNN = TRUE, force.recalc = TRUE)
+ovary <- FindClusters(object = ovary, 
+                      reduction.type = "pca", 
+                      dims.use = 1:15, 
+                      resolution = 0.9, 
+                      print.output = 0, 
+                      save.SNN = TRUE, 
+                      force.recalc = TRUE)
 ```
 
 A useful feature in Seurat v2.0 is the ability to recall the parameters that were used in the latest function calls for commonly used functions. For FindClusters, we provide the function `PrintFindClustersParams` to print a nicely formatted formatted summary of the parameters that were chosen. 
@@ -414,31 +542,166 @@ Seurat continues to use tSNE as a powerful tool to visualize and explore these d
 
 
 ## Draw t-SNE and PCA  
-```{r clusterPCs1-15, fig.height=8, fig.width=9}
-
+```{r clusterPCs1-15, fig.height=7, fig.width=10}
 # save.SNN = T saves the SNN so that the clustering algorithm can be rerun using the same graph
 # but with a different resolution value (see docs for full details)
 
 ## Plot tSNEs and PCAs 
-ovary <- RunTSNE(object = ovary, dims.use = 1:15, do.fast = TRUE )
+ovary <- RunTSNE(object = ovary, 
+                 dims.use = 1:15, 
+                 do.fast = TRUE )
+ovary <- RunUMAP(object = ovary, 
+                 reduction.use = "pca", 
+                 dims.use = 1:15)
+
 pdfPath <- paste0(outputDir, "/pdfPlots/")
 dir.create(pdfPath)
 TSNEPlot(object = ovary, do.label = T)
 ggsave(paste0(pdfPath, "tSNE.pdf"), width = 10, height = 7)
 TSNEPlot(object = ovary, do.label = T, group.by = "orig.ident")
+TSNEPlot(object = ovary, do.label = T, group.by = "patient")
+ggsave(paste0(pdfPath, "tSNEPatient.pdf"), width = 10, height = 7)
 ggsave(paste0(pdfPath, "tSNEOrigIdent.pdf"), width = 10, height = 7)
 PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2, pt.size=1)
 ggsave(paste0(pdfPath, "PCA.pdf"), width = 10, height = 7)
 PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2, pt.size=1, group.by = 'orig.ident')
 ggsave(paste0(pdfPath, "PCAOrigIdent.pdf"), width = 10, height = 7)
+TSNEPlot(object = ovary, do.label = T, group.by = "origin.run")
+ggsave(paste0(pdfPath, "tSNEOrigRun.pdf"), width = 10, height = 7)
+PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2, pt.size=1, group.by = 'origin.run')
+ggsave(paste0(pdfPath, "PCAOrigRun.pdf"), width = 10, height = 7)
+DimPlot(object = ovary, reduction.use = "umap", do.return = TRUE)
+ggsave(paste0(outputDir, "/UMAP.pdf"), width = 10, height = 7)
+```
 
-## 
+### Calculate the corrected PC embeddings for cells
+fastMNN function provides a variant of the mnnCorrect function, modified for speed and more robust performance. In particular:
 
-# find markers for every cluster compared to all remaining cells, report
-# only the positive ones
-ovary.markers <- FindAllMarkers(object = ovary, only.pos = TRUE, min.pct = 0.25, 
-                               thresh.use = 0.25)
-topMarkers <- ovary.markers %>% group_by(cluster) %>% top_n(30, avg_logFC)
+It performs a multi-sample PCA via multiBatchPCA and subsequently performs all calculations in the PC space. This reduces computational work and provides some denoising - see, comments in ?denoisePCA. As a result, though, the corrected output cannot be interpreted on a gene level and is useful only for cell-level comparisons, e.g., clustering and visualization.
+
+    The correction vector for each cell is directly computed from its k nearest neighbours in the same batch. Specifically, only the k nearest neighbouring cells that also participate in MNN pairs are used. Each MNN-participating neighbour is weighted by distance from the current cell, using a tricube scheme with bandwidth equal to the median distance multiplied by ndist. This ensures that the correction vector only uses information from the closest cells, improving the fidelity of local correction.
+
+    Issues with “kissing” are avoided with a two-step procedure that removes variation along the batch effect vector. First, the average correction vector across all MNN pairs is computed. Cell coordinates are adjusted such that all cells in a single batch have the same position along this vector. The correction vectors are then recalculated with the adjusted coordinates (but the same MNN pairs).
+
+The default setting of cos.norm=TRUE provides some protection against differences in scaling for arbitrary expression matrices. However, if possible, we recommend using the output of multiBatchNorm as input to fastMNN. This will equalize coverage on the count level before the log-transformation, which is a more accurate rescaling than cosine normalization on the log-values.
+```{r fastMNN}
+listObj <- SplitObject(ovary, attribute.1 = "patient")
+## Cell embeddings for patients separately 
+cellEmbeddings <- lapply(listObj, function(x) {
+  GetCellEmbeddings(object = x, 
+                    reduction.type = "pca", 
+                    dims.use = 1:20)
+})
+t <- fastMNN(cellEmbeddings$P7, cellEmbeddings$P9, cellEmbeddings$P0, cellEmbeddings$P3, cellEmbeddings$P2, 
+             pc.input=TRUE,
+             compute.variances = TRUE)
+```
+
+### Variance parallel to the average correction vectors
+Function computes the percentage of variance that is lost from each batch during orthogonalization. This represents the variance in each batch that is parallel to the average correction vectors (and hence removed during orthogonalization) at each merge step. Large proportions suggest that there is biological structure that is parallel to the batch effect, corresponding to violations of the assumption that the batch effect is orthogonal to the biological subspace. 
+```{r lost variance}
+print("Lost variance:")
+t$lost.var
+```
+
+###  Integrate corrected PCs into Seurat object
+Calculations further downstream are based on the corrected PCs
+```{r }
+## Keep the order of the cell IDs as in the original dataset and save in Seurat object
+orderedCorrected <- t$corrected[match(colnames(ovary@data), rownames(t$corrected)), ]
+ovary <- SetDimReduction(object = ovary, 
+                         reduction.type = "mnn.correct",
+                         slot = "cell.embeddings",
+                         new.data = orderedCorrected)
+ovary <- SetDimReduction(object = ovary,
+                         reduction.type = "mnn.correct",
+                         slot = "key",
+                         new.data = "MNN")
+
+## Objerve genes correlated with corrected PCs
+ovary <- ProjectDim(object = ovary, 
+                    genes.print = 10,
+                    reduction.type = "mnn.correct")
+```
+
+## Plot Heatmaps
+```{r heatmaps MNN}
+DimHeatmap(object = ovary, 
+           reduction.type = "mnn.correct", 
+           dim.use = 1, 
+           cells.use = 500, 
+           use.full = TRUE, 
+           do.balanced = TRUE, 
+           label.columns = FALSE, 
+           remove.key = FALSE)
+
+DimHeatmap(object = ovary,
+           reduction.type = "mnn.correct", 
+           dim.use = 1:20, 
+           use.full = TRUE, 
+           cells.use = 500, 
+           do.balanced = TRUE, 
+           label.columns = FALSE, 
+           remove.key = TRUE)
+```
+
+## Recalculate clusters and tSNE using the new cell embeddings
+```{r cluster tSNE}
+ovary <- FindClusters(object = ovary, 
+                      reduction.type = "mnn.correct", 
+                      dims.use = 1:15, 
+                      resolution = 0.9, 
+                      print.output = 0, 
+                      save.SNN = TRUE, 
+                      force.recalc = TRUE)
+
+## Plot tSNEs and PCAs 
+ovary <- RunTSNE(object = ovary, 
+                 dims.use = 1:15, 
+                 reduction.use = "mnn.correct",
+                 do.fast = TRUE )
+ovary <- RunUMAP(object = ovary, 
+                 reduction.use = "mnn.correct", 
+                 dims.use = 1:15)
+```
+
+## Plot again after correction
+```{r plots}
+pdfPath <- paste0(outputDir, "/pdfPlotsMNN/")
+dir.create(pdfPath)
+TSNEPlot(object = ovary, do.label = T)
+ggsave(paste0(pdfPath, "tSNE.pdf"), width = 10, height = 7)
+TSNEPlot(object = ovary, do.label = T, group.by = "orig.ident")
+ggsave(paste0(pdfPath, "tSNEOrigIdent.pdf"), width = 10, height = 7)
+TSNEPlot(object = ovary, do.label = T, group.by = "patient")
+ggsave(paste0(pdfPath, "tSNEPatient.pdf"), width = 10, height = 7)
+DimPlot(object = ovary, reduction.use = "mnn.correct")
+ggsave(paste0(pdfPath, "PCA.pdf"), width = 10, height = 7)
+DimPlot(object = ovary, reduction.use = "mnn.correct", group.by = 'orig.ident')
+ggsave(paste0(pdfPath, "PCAOrigIdent.pdf"), width = 10, height = 7)
+TSNEPlot(object = ovary, do.label = T, group.by = "origin.run")
+ggsave(paste0(pdfPath, "tSNEOrigRun.pdf"), width = 10, height = 7)
+PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2, pt.size=1, group.by = 'origin.run')
+ggsave(paste0(pdfPath, "PCAOrigRun.pdf"), width = 10, height = 7)
+DimPlot(object = ovary, reduction.use = "umap", do.label = T, do.return = TRUE)
+ggsave(paste0(outputDir, "/UMAP.pdf"), width = 10, height = 7)
+```
+
+```{r find markers}
+## Find markers for every cluster compared to all remaining cells, report
+## only the positive ones
+ovary.markers <- FindAllMarkers(object = ovary,
+                                only.pos = TRUE,
+                                min.pct = 0.25,
+                                thresh.use = 0.25)
+allMarkersFile <- paste0(outputDir, "/allMarkerGenes.tsv")
+write.table(x = ovary.markers, file = allMarkersFile, sep = "\t", quote = FALSE)
+
+## Separate genes with avg_logFG>0.5 and save top 50 genes per cluster (sorted by adj_p_val)
+topMarkers <- ovary.markers %>% 
+              group_by(cluster) %>% 
+              filter(avg_logFC > 0.5) %>%
+              top_n(-50, p_val_adj) 
 topGenesPath = paste0(outputDir, "/topMarkerGenes.tsv")
 write.table(x = topMarkers, file = topGenesPath, sep = "\t", quote = FALSE, row.names = FALSE)
 
@@ -447,16 +710,163 @@ ovaryRds = paste0(outputDir, "/ovary.rds")
 saveRDS(ovary, file =  ovaryRds)
 ```
 
+### Perform a GO terms enrichment analysis on Biological Processes terms
+```{r GO_terms, message=FALSE}
+## Code from Davy Cats
+GOdir <- paste0(outputDir,"/GOanalysis/")
+dir.create(GOdir, showWarnings = FALSE)
 
-### As an extra, make plot interactive
-```{r interactivetSNEs, fig.height=8, fig.width=9}
-p <- TSNEPlot(object = ovary, do.label = T, do.return = TRUE) #, do.hover = TRUE, do.identify = TRUE)
+# Initialize list for storing the results in.
+lst <- list()
+
+# Loop through the clusters.
+for (x in unique(ovary.markers$cluster)){
+  print(x)
+  
+  # Make a names list of adjusted p-values, with their names being the
+  # associated gene.
+  genes <- ovary.markers[ovary.markers$cluster == x, "p_val_adj"]
+  names(genes) <- ovary.markers[ovary.markers$cluster == x, "gene"]
+  
+  # Create a topGOdata object, containing the genes, a function for selecting
+  # genes of interest and GO annotations.
+  GOdata <- new("topGOdata",
+                description="test",
+                ontology="BP",
+                allGenes=genes,
+                geneSel=function(scores) {return(scores< 0.01)},
+                annot=annFUN.org,
+                mapping="org.Hs.eg.db",
+                ID="symbol",
+                nodeSize=10)
+  
+  # Perform Kolmogorov-Smirnov test, using three different GO graph handling
+  # algorithms.
+  resultKS.classic <- runTest(GOdata, algorithm = "classic", statistic = "ks")
+  resultKS <- runTest(GOdata, algorithm = "weight01", statistic = "ks")
+  resultKS.elim <- runTest(GOdata, algorithm = "elim", statistic = "ks")
+  
+  # Make a table from the results, ordered by the p-values of the classic
+  # algorithm.
+  tbl <- as.data.frame(GenTable(GOdata, ks=resultKS, ks.elim=resultKS.elim,
+                                ks.classic=resultKS.classic,
+                                topNodes=20, orderBy="ks.classic", numChar = 180))
+  
+  # Add the results table to the results list.
+  lst[[x]] <- tbl
+  
+  ## Write results table to file
+  write.table(tbl, file = paste0(GOdir, "cluster_", x, ".tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+}
+
+## Write all groups GO output to a single table 
+GO <- data.frame()
+for (name in names(lst)) {
+  df <- lst[[name]]
+  df <- cbind(groupID = name, df)
+  GO <- rbind(GO, df)
+}
+write.table(GO, file = paste0(outputDir, "/GOAnalysis.tsv"), sep = "\t", row.names = FALSE, quote = FALSE)
+```
+
+### Calculate the per cluster mean , geometric mean and median
+```{r perCluster}
+groupIdentity <- ovary@ident
+normCounts <- ovary@data
+
+## Substiture cell ID with cluster ID
+colnames(normCounts) <- groupIdentity
+
+## Calculate median 
+medianDF <- do.call(cbind, lapply(levels(groupIdentity), function(id){
+   groupCounts <- normCounts[, colnames(normCounts) == id]
+   df <- data.frame( c = apply(groupCounts, 1, median))
+   colnames(df) <- id
+   return(df)
+ }))
+ write.table(medianDF, paste0(outputDir, "/perClusterMedian.tsv"), sep = "\t", quote = FALSE)
+ 
+## Calculate geometric mean
+gm_mean = function(x, na.rm=TRUE){
+   exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+geomMeanDF <- do.call(cbind, lapply(levels(groupIdentity), function(id){
+   groupCounts <- normCounts[, colnames(normCounts) == id]
+   df <- data.frame( c = apply(groupCounts, 1, gm_mean))
+   colnames(df) <- id
+   return(df)
+}))
+write.table(geomMeanDF, paste0(outputDir, "/perClusterGeomMean.tsv"), sep = "\t", quote = FALSE)
+ 
+## Calculate Mean
+meanDF <- do.call(cbind, lapply(levels(groupIdentity), function(id){
+   groupCounts <- normCounts[, colnames(normCounts) == id]
+   df <- data.frame( c = apply(groupCounts, 1, mean))
+   colnames(df) <- id
+   return(df)
+}))
+write.table(meanDF, paste0(outputDir, "/perClusterMean.tsv"), sep = "\t", quote = FALSE)
+```
+
+### Draw the dendrogram of the cell clusters. 
+* Clustering is based on the per cluster mean gene expression
+* Distance measure euclidian
+```{r hclust_dendrogram, fig.height=7, fig.width=10}
+distance <- dist(t(meanDF))
+hc <- hclust(distance)
+plot(hc)
+
+rv <- genefilter::rowVars(meanDF)
+idx <- order(-rv)[1:50]
+e <- as.matrix(meanDF)
+heatmap.2(e[idx, ], trace = "none")
+```
+
+* Clustering is based on the per cluster median gene expression
+* Distance measure euclidian
+```{r hclust_dendrogram median, fig.height=7, fig.width=10}
+distance <- dist(t(medianDF))
+hc <- hclust(distance)
+plot(hc)
+
+rv <- genefilter::rowVars(medianDF)
+idx <- order(-rv)[1:50]
+e <- as.matrix(medianDF)
+heatmap.2(e[idx, ], trace = "none")
+```
+
+* Clustering is based on the per cluster mean gene expression
+* Distance measure manhattan
+```{r hclust_dendrogram manhattan, fig.height=7, fig.width=10}
+distance <- dist(t(meanDF), method = "manhattan")
+hc <- hclust(distance)
+plot(hc)
+
+rv <- genefilter::rowVars(meanDF)
+idx <- order(-rv)[1:50]
+e <- as.matrix(meanDF)
+pdf(paste0(outputDir, "/heatmapManhattan.pdf"), width = 10, height = 7)
+heatmap.2(e[idx, ], 
+          trace = "none", 
+          distfun = function(x) dist(x, method = "manhattan"))
+dev.off()
+```
+
+### Interactive plots
+```{r interactivetSNEs, fig.height=7, fig.width=10}
+p <- TSNEPlot(object = ovary, do.label = T, do.return = TRUE) 
 ggplotly(p)
-p <- TSNEPlot(object = ovary, do.label = T, group.by = "orig.ident", do.return = TRUE) #, do.hover = TRUE, do.identify = TRUE)
+p <- TSNEPlot(object = ovary, do.label = T, group.by = "orig.ident", do.return = TRUE) 
 ggplotly(p)
-p <- PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2, do.return = TRUE) # , do.hover = TRUE, do.identify = TRUE, do.label=TRUE, no.legend = FALSE)
+p <- TSNEPlot(object = ovary, do.label = T, group.by = "origin.run", do.return = TRUE) 
 ggplotly(p)
-p <- PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2, group.by = 'orig.ident', do.return = TRUE) #, do.hover = TRUE, do.identify = TRUE, no.legend = FALSE)
+p <- PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2, do.return = TRUE) 
+ggplotly(p)
+p <- TSNEPlot(object = ovary, do.label = T, group.by = "patient", do.return = TRUE)
+ggplotly(p)
+p <- PCAPlot(object = ovary, dim.1 = 1, dim.2 = 2, group.by = 'origin.run', do.return = TRUE) 
+ggplotly(p)
+p <- DimPlot(object = ovary, reduction.use = "umap", do.return = TRUE)
 ggplotly(p)
 ```
 

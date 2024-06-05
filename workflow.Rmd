@@ -47,7 +47,7 @@ g2m.genes <- cc.genes[44:97]
 ## A table with SampleID and patients
 sample2Pat <- read.table(file = ".../analysis/juneRun/combineOvary/batchEffectScaleData/sample2PatientQuote.csv", header = TRUE, as.is = TRUE)
 
-## First Ovary run, output of cellRanger 2.1.1
+## Batch 1 ovary, output of cellRanger 2.1.1
 # Read the datasets one by one
 ovary.1.data <- Read10X(data.dir = ".../data/cellRanger2.1.1Counts/sample1_B1_i12A/outs/filtered_gene_bc_matrices/GRCh38/")
 ovary.2.data <- Read10X(data.dir = ".../data/cellRanger2.1.1Counts/sample2_B1_i12B/outs/filtered_gene_bc_matrices/GRCh38/")
@@ -65,7 +65,7 @@ ovary.13.data <- Read10X(data.dir = ".../data/cellRanger2.1.1Counts/sample13_B1_
 ovary.145.data <- Read10X(data.dir = ".../data/cellRanger2.1.1Counts/sample145_B1_i12D/outs/filtered_gene_bc_matrices/GRCh38/")
 ovary.C1.data <- Read10X(data.dir = ".../data/cellRanger2.1.1Counts/sampleC1_B1_i12E/outs/filtered_gene_bc_matrices/GRCh38/")
 
-## June datasets
+## Batch 2 ovary
 # Read the datasets one by one
 ovary.1_1.data <- Read10X(data.dir = ".../data/cellRangerOutputJune/sample_1-1/outs/filtered_gene_bc_matrices/GRCh38/")
 ovary.1_2.data <- Read10X(data.dir = ".../data/cellRangerOutputJune/sample_1-2/outs/filtered_gene_bc_matrices/GRCh38/")
@@ -90,7 +90,7 @@ ovary.3_18.data <- Read10X(data.dir = ".../data/cellRangerOutputJune/sample_3-18
 # genes expressed in >= 3 cells. Keep all cells with at
 # least 100 detected genes
 
-## Old Ovary samples
+## Batch 1 ovary
 ovary.1 <- CreateSeuratObject(raw.data = ovary.1.data, min.cells = 3, min.genes = 100, project = "01")
 ovary.2 <- CreateSeuratObject(raw.data = ovary.2.data, min.cells = 3, min.genes = 100, project = "02")
 ovary.3 <- CreateSeuratObject(raw.data = ovary.3.data, min.cells = 3, min.genes = 100, project = "03")
@@ -107,7 +107,7 @@ ovary.13 <- CreateSeuratObject(raw.data = ovary.13.data, min.cells = 3, min.gene
 ovary.145 <- CreateSeuratObject(raw.data = ovary.145.data, min.cells = 3, min.genes = 100, project = "145")
 ovary.C1 <- CreateSeuratObject(raw.data = ovary.C1.data, min.cells = 3, min.genes = 100, project = "C1")
 
-## June Datasets
+## Batch 2 ovary
 ovary.1_1 <- CreateSeuratObject(raw.data = ovary.1_1.data, min.cells = 3, min.genes = 100, project = "1.1")
 ovary.1_2 <- CreateSeuratObject(raw.data = ovary.1_2.data, min.cells = 3, min.genes = 100, project = "1.2")
 ovary.1_3 <- CreateSeuratObject(raw.data = ovary.1_3.data, min.cells = 3, min.genes = 100, project = "1.3")
@@ -125,7 +125,8 @@ ovary.3_16 <- CreateSeuratObject(raw.data = ovary.3_16.data, min.cells = 3, min.
 ovary.3_17 <- CreateSeuratObject(raw.data = ovary.3_17.data, min.cells = 3, min.genes = 100, project = "3.17")
 ovary.3_18 <- CreateSeuratObject(raw.data = ovary.3_18.data, min.cells = 3, min.genes = 100, project = "3.18")
 
-## Merge objects
+# Merge objects
+## Batch 2 ovary
 ovary <- MergeSeurat(ovary.1_1, ovary.1_2, add.cell.id1 = "1.1", add.cell.id2 = "1.2", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.1_3, add.cell.id2 = "1.3", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.1_4, add.cell.id2 = "1.4", do.normalize = FALSE)
@@ -142,7 +143,7 @@ ovary <- MergeSeurat(ovary, ovary.3_16, add.cell.id2 = "3.16", do.normalize = FA
 ovary <- MergeSeurat(ovary, ovary.3_17, add.cell.id2 = "3.17", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.3_18, add.cell.id2 = "3.18", do.normalize = FALSE)
 
-## Old ovary Data
+## Batch 1 ovary
 ovary <- MergeSeurat(ovary, ovary.6a, add.cell.id2 = "6a", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.8a, add.cell.id2 = "8a", do.normalize = FALSE)
 ovary <- MergeSeurat(ovary, ovary.8b, add.cell.id2 = "8b", do.normalize = FALSE)
